@@ -22,7 +22,7 @@ uvicorn main:app --reload --port 8000
 
 The server starts at `http://localhost:8000`. The WebSocket endpoint is `ws://localhost:8000/ws`.
 
-If the ESP32 is not paired, the backend will scan and retry every 3 seconds — no crash. The frontend will show "No signal" until a connection is established.
+The backend sits idle until the Scan button is pressed in the frontend. If the ESP32 is not found, it reports back and waits for another scan attempt.
 
 ---
 
@@ -31,11 +31,28 @@ If the ESP32 is not paired, the backend will scan and retry every 3 seconds — 
 Requires Node 18+.
 
 ```bash
+cd frontend
 npm install   # first time only
 npm start
 ```
 
-Opens at `http://localhost:3000`. The app connects to the backend WebSocket automatically and displays live metrics. All values show `--` until the backend is running and the ESP32 is connected.
+Opens at `http://localhost:3000`. The app connects to the backend WebSocket automatically. Press **Scan** in the UI to initiate a BLE search for `SteadyStep-IMU`.
+
+---
+
+## Project structure
+
+```
+ieee2026-fullstack-interface/
+├── frontend/        ← React app
+│   ├── src/
+│   ├── public/
+│   └── package.json
+└── backend/         ← FastAPI + BLE reader
+    ├── main.py
+    ├── ble_reader.py
+    └── requirements.txt
+```
 
 ---
 
@@ -44,3 +61,4 @@ Opens at `http://localhost:3000`. The app connects to the backend WebSocket auto
 1. Power on the ESP32
 2. Start the backend (`uvicorn ...`)
 3. Start the frontend (`npm start`)
+4. Press **Scan** in the browser
