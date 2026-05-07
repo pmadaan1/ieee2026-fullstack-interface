@@ -42,6 +42,45 @@ body {
   padding: 3px 10px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scan-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px;
+  border-radius: 99px;
+  border: 1.5px solid #378ADD;
+  background: transparent;
+  color: #378ADD;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scan-btn:hover:not(:disabled) {
+  background: #378ADD;
+  color: #fff;
+}
+
+.scan-btn:disabled {
+  border-color: #aaa;
+  color: #aaa;
+  cursor: default;
+}
+
+.live-badge--off {
+  color: #888;
+  background: #ebebeb;
+}
+
+.live-badge--off .live-dot {
+  background: #aaa;
+  animation: none;
+}
+
 .live-dot {
   width: 7px;
   height: 7px;
@@ -60,6 +99,18 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.no-device {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 60vh;
+}
+
+.no-device-text {
+  font-size: 15px;
+  color: #888;
 }
 
 .similarity-bar-bg {
