@@ -1,16 +1,20 @@
 # SteadyStep — Run Instructions
 
-Real-time gait monitoring dashboard. An ESP32 IMU streams accelerometer and gyroscope data over BLE to a Python backend, which processes the signals and pushes metrics to a React frontend via WebSocket.
+Real-time gait monitoring dashboard. The browser connects directly to the ESP32 over Web Bluetooth, forwards raw IMU data to a Python backend for signal processing, and displays the resulting metrics.
 
 ```
-ESP32 (SteadyStep-IMU) → Bluetooth → Python backend → WebSocket → React app
+ESP32 (SteadyStep-IMU) ←— Web Bluetooth —→ Browser
+                                                ↕ WebSocket
+                                            Backend (signal processing)
 ```
+
+**Important:** Web Bluetooth only works in Chrome or Edge. Safari and Firefox are not supported.
 
 ---
 
 ## Backend
 
-Requires Python 3.10+.
+Requires Python 3.10+. Handles signal processing only — no Bluetooth required.
 
 ```bash
 cd backend
@@ -21,8 +25,6 @@ uvicorn main:app --reload --port 8000
 ```
 
 The server starts at `http://localhost:8000`. The WebSocket endpoint is `ws://localhost:8000/ws`.
-
-The backend sits idle until the Scan button is pressed in the frontend. If the ESP32 is not found, it reports back and waits for another scan attempt.
 
 ---
 
@@ -36,7 +38,7 @@ npm install   # first time only
 npm start
 ```
 
-Opens at `http://localhost:3000`. The app connects to the backend WebSocket automatically. Press **Scan** in the UI to initiate a BLE search for `SteadyStep-IMU`.
+Opens at `http://localhost:3000`. Press **Scan** in the browser to connect to `SteadyStep-IMU` via Bluetooth. Chrome will show a device picker popup — select the device and confirm.
 
 ---
 
@@ -44,13 +46,12 @@ Opens at `http://localhost:3000`. The app connects to the backend WebSocket auto
 
 ```
 ieee2026-fullstack-interface/
-├── frontend/        ← React app
+├── frontend/        ← React app (Web Bluetooth + display)
 │   ├── src/
 │   ├── public/
 │   └── package.json
-└── backend/         ← FastAPI + BLE reader
+└── backend/         ← FastAPI signal processing server
     ├── main.py
-    ├── ble_reader.py
     └── requirements.txt
 ```
 
@@ -61,4 +62,4 @@ ieee2026-fullstack-interface/
 1. Power on the ESP32
 2. Start the backend (`uvicorn ...`)
 3. Start the frontend (`npm start`)
-4. Press **Scan** in the browser
+4. Open Chrome and press **Scan**
