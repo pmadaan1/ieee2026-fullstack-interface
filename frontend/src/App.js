@@ -6,7 +6,8 @@ import './App.css';
 
 const MAX_POINTS = 20;
 const WS_URL   = 'ws://localhost:8000/ws';
-const SCAN_URL = 'http://localhost:8000/scan';
+const SCAN_URL       = 'http://localhost:8000/scan';
+const DISCONNECT_URL = 'http://localhost:8000/disconnect';
 
 function formatTime(date) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -21,6 +22,7 @@ export default function App() {
   const [similarity, setSimilarity] = useState(null);
   const [gait, setGait]           = useState({ classification: 'Normal', confidence: null });
   const [cadenceHistory, setCadenceHistory] = useState({ values: [], labels: [] });
+  const [raw, setRaw] = useState(null);
 
   useEffect(() => {
     let ws;
@@ -30,11 +32,13 @@ export default function App() {
       ws = new WebSocket(WS_URL);
 
       ws.onmessage = (event) => {
-        const { connected: isConnected, scanning: isScanning, metrics: m } = JSON.parse(event.data);
+        const { connected: isConnected, scanning: isScanning, metrics: m, raw: r } = JSON.parse(event.data);
         setConnected(isConnected);
         setScanning(isScanning);
 
         if (!isConnected) return;
+
+        if (r) setRaw(r);
 
         setCadence(m.cadence);
         setSteps(m.steps);
@@ -72,6 +76,10 @@ export default function App() {
     await fetch(SCAN_URL, { method: 'POST' });
   }
 
+  async function handleDisconnect() {
+    await fetch(DISCONNECT_URL, { method: 'POST' });
+  }
+
   const avgCadence = cadenceHistory.values.length
     ? Math.round(cadenceHistory.values.reduce((s, v) => s + v, 0) / cadenceHistory.values.length)
     : null;
@@ -101,11 +109,12 @@ export default function App() {
             <div className="live-dot" />
             {badgeLabel}
           </div>
-          {!connected && (
-            <button className="scan-btn" onClick={handleScan} disabled={scanning}>
-              {scanning ? 'Scanning...' : 'Scan'}
-            </button>
-          )}
+          {connected
+            ? <button className="disconnect-btn" onClick={handleDisconnect}>Disconnect</button>
+            : <button className="scan-btn" onClick={handleScan} disabled={scanning}>
+                {scanning ? 'Scanning...' : 'Scan'}
+              </button>
+          }
         </div>
       </header>
 
@@ -162,6 +171,26 @@ export default function App() {
           </div>
 
           <CadenceTrend history={cadenceHistory.values} labels={cadenceHistory.labels} />
+
+          {raw && (
+            <div className="raw-card">
+              <div className="raw-title">Raw IMU data</div>
+              <div className="raw-groups">
+                <div className="raw-group">
+                  <div className="raw-group-label">Accelerometer (m/s²)</div>
+                  <div className="raw-row"><span>ax</span><span>{raw.ax.toFixed(2)}</span></div>
+                  <div className="raw-row"><span>ay</span><span>{raw.ay.toFixed(2)}</span></div>
+                  <div className="raw-row"><span>az</span><span>{raw.az.toFixed(2)}</span></div>
+                </div>
+                <div className="raw-group">
+                  <div className="raw-group-label">Gyroscope (°/s)</div>
+                  <div className="raw-row"><span>gx</span><span>{raw.gx.toFixed(2)}</span></div>
+                  <div className="raw-row"><span>gy</span><span>{raw.gy.toFixed(2)}</span></div>
+                  <div className="raw-row"><span>gz</span><span>{raw.gz.toFixed(2)}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

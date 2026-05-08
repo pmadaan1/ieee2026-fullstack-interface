@@ -71,6 +71,23 @@ body {
   cursor: default;
 }
 
+.disconnect-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px;
+  border-radius: 99px;
+  border: 1.5px solid #cc4444;
+  background: transparent;
+  color: #cc4444;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.disconnect-btn:hover {
+  background: #cc4444;
+  color: #fff;
+}
+
 .live-badge--off {
   color: #888;
   background: #ebebeb;
@@ -110,6 +127,45 @@ body {
 
 .no-device-text {
   font-size: 15px;
+  color: #888;
+}
+
+.raw-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+
+.raw-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin-bottom: 12px;
+}
+
+.raw-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.raw-group-label {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.raw-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 0;
+  color: #333;
+}
+
+.raw-row span:first-child {
   color: #888;
 }
 

@@ -98,6 +98,14 @@ async def trigger_scan():
     return {"status": "scanning"}
 
 
+@app.post("/disconnect")
+async def trigger_disconnect():
+    if not ble.connected:
+        return {"status": "not connected"}
+    await ble.disconnect()
+    return {"status": "disconnected"}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
