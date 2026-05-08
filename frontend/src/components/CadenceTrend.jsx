@@ -37,17 +37,17 @@ export default function CadenceTrend({ history, labels }) {
           {
             label: 'Target max',
             data: Array(MAX_POINTS).fill(TARGET_MAX),
-            borderColor: 'rgba(99,153,34,0.3)',
+            borderColor: 'rgba(15,166,114,0.35)',
             borderWidth: 1,
             borderDash: [4, 4],
             pointRadius: 0,
             fill: '+1',
-            backgroundColor: 'rgba(99,153,34,0.08)',
+            backgroundColor: 'rgba(15,166,114,0.08)',
           },
           {
             label: 'Target min',
             data: Array(MAX_POINTS).fill(TARGET_MIN),
-            borderColor: 'rgba(99,153,34,0.3)',
+            borderColor: 'rgba(15,166,114,0.35)',
             borderWidth: 1,
             borderDash: [4, 4],
             pointRadius: 0,
@@ -56,10 +56,12 @@ export default function CadenceTrend({ history, labels }) {
           {
             label: 'Cadence',
             data: history,
-            borderColor: '#378ADD',
-            borderWidth: 2,
+            borderColor: '#1668C1',
+            borderWidth: 2.5,
             pointRadius: 3,
-            pointBackgroundColor: '#378ADD',
+            pointBackgroundColor: '#1668C1',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 1.5,
             fill: false,
             tension: 0.35,
           },
@@ -123,11 +125,11 @@ export default function CadenceTrend({ history, labels }) {
       </div>
       <div className="cadence-legend">
         <span className="legend-item">
-          <span className="legend-dot" style={{ background: '#378ADD' }} />
+          <span className="legend-dot" style={{ background: '#1668C1' }} />
           Cadence
         </span>
         <span className="legend-item">
-          <span className="legend-dot" style={{ background: 'rgba(99,153,34,0.5)' }} />
+          <span className="legend-dot" style={{ background: 'rgba(15,166,114,0.55)' }} />
           Target zone (100–120 spm)
         </span>
       </div>
