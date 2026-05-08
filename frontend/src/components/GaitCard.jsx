@@ -1,9 +1,10 @@
 import './GaitCard.css';
 
 const CONFIG = {
-  Normal:    { bg: '#eaf3de', color: '#3b6d11', icon: 'check' },
-  Limping:   { bg: '#faeeda', color: '#854f0b', icon: 'warn'  },
-  Shuffling: { bg: '#faece7', color: '#993c1d', icon: 'alert' },
+  Normal:    { bg: '#E1F1EA', color: '#0E7A53', icon: 'check' },
+  Unsteady:  { bg: '#FFF4DD', color: '#A56A12', icon: 'warn'  },
+  Limping:   { bg: '#FFEAD2', color: '#9F571B', icon: 'warn'  },
+  Shuffling: { bg: '#FFE2D5', color: '#A1431F', icon: 'alert' },
 };
 
 function Icon({ type, color }) {
@@ -31,15 +32,18 @@ function Icon({ type, color }) {
   );
 }
 
-export default function GaitCard({ classification = 'Normal', confidence = 94 }) {
+export default function GaitCard({ classification = 'Normal', confidence = null }) {
   const cfg = CONFIG[classification] || CONFIG.Normal;
+  const confText = confidence === null || confidence === undefined
+    ? 'Awaiting data'
+    : `Confidence: ${confidence}%`;
 
   return (
     <div className="gait-card" style={{ background: cfg.bg }}>
       <div className="gait-left">
         <div className="gait-label">Gait classification</div>
         <div className="gait-class" style={{ color: cfg.color }}>{classification}</div>
-        <div className="gait-conf">Confidence: {confidence}%</div>
+        <div className="gait-conf">{confText}</div>
       </div>
       <div className="gait-circle" style={{ background: cfg.color }}>
         <Icon type={cfg.icon} color="#fff" />

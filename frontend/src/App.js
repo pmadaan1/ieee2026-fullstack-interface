@@ -13,15 +13,16 @@ function formatTime(date) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+function titleCase(s) {
+  if (!s) return '--';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export default function App() {
   const [connected, setConnected]     = useState(false);
   const [scanning, setScanning]       = useState(false);
   const [raw, setRaw]                 = useState(null);
-  const [cadence, setCadence]         = useState(null);
-  const [steps, setSteps]             = useState(null);
-  const [clearance, setClearance]     = useState(null);
-  const [similarity, setSimilarity]   = useState(null);
-  const [gait, setGait]               = useState({ classification: 'Normal', confidence: null });
+  const [metrics, setMetrics]         = useState(null);
   const [cadenceHistory, setCadenceHistory] = useState({ values: [], labels: [] });
 
   const wsRef     = useRef(null);
@@ -41,16 +42,9 @@ export default function App() {
         const { metrics: m } = JSON.parse(event.data);
         if (!m) return;
 
-        setCadence(m.cadence);
-        setSteps(m.steps);
-        setClearance(m.clearance);
-        setSimilarity(m.similarity);
+        setMetrics(m);
 
-        if (m.classification !== null) {
-          setGait({ classification: m.classification, confidence: m.confidence });
-        }
-
-        if (m.cadence !== null) {
+        if (m.cadence !== null && m.cadence !== undefined) {
           setCadenceHistory(prev => ({
             values: [...prev.values.slice(-(MAX_POINTS - 1)), m.cadence],
             labels: [...prev.labels.slice(-(MAX_POINTS - 1)), formatTime(new Date())],
@@ -107,6 +101,7 @@ export default function App() {
       device.addEventListener('gattserverdisconnected', () => {
         setConnected(false);
         setRaw(null);
+        setMetrics(null);
       });
 
       const server  = await device.gatt.connect();
@@ -137,32 +132,63 @@ export default function App() {
     deviceRef.current = null;
     setConnected(false);
     setRaw(null);
+    setMetrics(null);
   }
+
+  // -- derived display values ----------------------------------------------
+  const m = metrics || {};
+  const has = (v) => v !== null && v !== undefined;
 
   const avgCadence = cadenceHistory.values.length
     ? Math.round(cadenceHistory.values.reduce((s, v) => s + v, 0) / cadenceHistory.values.length)
     : null;
 
-  const cadenceDiff = cadence !== null && avgCadence !== null ? cadence - avgCadence : null;
+  const cadenceDiff = has(m.cadence) && avgCadence !== null ? m.cadence - avgCadence : null;
   const cadenceDelta = cadenceDiff === null ? null
-    : cadenceDiff === 0 ? 'at average'
-    : `${cadenceDiff > 0 ? '+' : ''}${cadenceDiff} from avg`;
+    : Math.abs(cadenceDiff) < 1 ? 'at average'
+    : `${cadenceDiff > 0 ? '+' : ''}${cadenceDiff.toFixed(0)} from avg`;
   const cadenceDeltaType = cadenceDiff === null ? 'neutral'
     : cadenceDiff > 5 ? 'up' : cadenceDiff < -5 ? 'down' : 'neutral';
 
-  const clearanceDelta = clearance === null ? null
-    : clearance < 10 ? 'low — possible shuffle'
-    : clearance > 28 ? 'high — check form'
+  const clearanceDelta = !has(m.clearance) ? null
+    : m.clearance < 5 ? 'low — possible shuffle'
+    : m.clearance > 28 ? 'high — check form'
     : 'normal range';
-  const clearanceDeltaType = clearance === null ? 'neutral'
-    : clearance < 10 || clearance > 28 ? 'down' : 'neutral';
+  const clearanceDeltaType = !has(m.clearance) ? 'neutral'
+    : m.clearance < 5 || m.clearance > 28 ? 'down' : 'neutral';
+
+  const speedKmh = has(m.speed) ? (m.speed * 3.6) : null;
+  const speedDelta = speedKmh === null ? null : `${speedKmh.toFixed(1)} km/h`;
+
+  const stanceDelta = !has(m.stance_pct) ? null
+    : m.stance_pct > 70 ? 'mostly planted'
+    : m.stance_pct < 20 ? 'mostly swinging'
+    : 'balanced';
+
+  const intensityDelta = !has(m.intensity) ? null
+    : m.intensity < 0.5 ? 'low — idle'
+    : m.intensity > 6 ? 'high — vigorous'
+    : 'moderate';
+
+  const stateLabel = titleCase(m.state);
+  const stateDelta = has(m.state_confidence) ? `${m.state_confidence}% confident` : null;
 
   const badgeLabel = scanning ? 'Scanning...' : connected ? 'Live' : 'No signal';
 
+  // -- render ---------------------------------------------------------------
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-title">SteadyStep</span>
+        <div className="brand">
+          <div className="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path d="M4 19 L9 12 L13 16 L20 6" stroke="currentColor" strokeWidth="2.4"
+                    fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="20" cy="6" r="2" fill="currentColor" />
+            </svg>
+          </div>
+          <span className="app-title">SteadyStep</span>
+        </div>
         <div className="header-right">
           <div className={`live-badge${connected ? '' : ' live-badge--off'}`}>
             <div className="live-dot" />
@@ -187,46 +213,82 @@ export default function App() {
       ) : (
         <>
           <GaitCard
-            classification={gait.classification}
-            confidence={gait.confidence}
+            classification={m.classification || 'Normal'}
+            confidence={has(m.confidence) ? m.confidence : null}
           />
+
+          <div className="section-label">Live metrics</div>
 
           <div className="metrics-grid">
             <MetricCard
+              label="Activity"
+              value={stateLabel}
+              delta={stateDelta}
+              deltaType="neutral"
+              accent="primary"
+            />
+            <MetricCard
               label="Cadence"
-              value={cadence !== null ? cadence : '--'}
-              unit={cadence !== null ? 'spm' : undefined}
+              value={has(m.cadence) ? m.cadence : '--'}
+              unit={has(m.cadence) ? 'spm' : undefined}
               delta={cadenceDelta}
               deltaType={cadenceDeltaType}
             />
             <MetricCard
-              label="Total steps"
-              value={steps !== null ? steps.toLocaleString() : '--'}
-              delta={steps !== null ? 'this session' : null}
+              label="Walking speed"
+              value={has(m.speed) ? m.speed.toFixed(2) : '--'}
+              unit={has(m.speed) ? 'm/s' : undefined}
+              delta={speedDelta}
+              deltaType="neutral"
+            />
+            <MetricCard
+              label="Steps (window)"
+              value={has(m.steps) ? m.steps.toLocaleString() : '--'}
+              delta={has(m.steps) ? 'last 10 s' : null}
+              deltaType="neutral"
+            />
+            <MetricCard
+              label="Stride length"
+              value={has(m.stride) ? m.stride.toFixed(2) : '--'}
+              unit={has(m.stride) ? 'm' : undefined}
               deltaType="neutral"
             />
             <MetricCard
               label="Foot clearance"
-              value={clearance !== null ? clearance.toFixed(1) : '--'}
-              unit={clearance !== null ? 'cm' : undefined}
+              value={has(m.clearance) ? m.clearance.toFixed(1) : '--'}
+              unit={has(m.clearance) ? 'cm' : undefined}
               delta={clearanceDelta}
               deltaType={clearanceDeltaType}
             />
             <MetricCard
               label="Gait similarity"
-              value={similarity !== null ? similarity.toFixed(1) : '--'}
-              unit={similarity !== null ? '/ 10' : undefined}
+              value={has(m.similarity) ? m.similarity.toFixed(1) : '--'}
+              unit={has(m.similarity) ? '/ 10' : undefined}
               deltaType="neutral"
             >
-              {similarity !== null && (
+              {has(m.similarity) && (
                 <div className="similarity-bar-bg">
                   <div
                     className="similarity-bar-fill"
-                    style={{ width: `${(similarity / 10) * 100}%` }}
+                    style={{ width: `${(m.similarity / 10) * 100}%` }}
                   />
                 </div>
               )}
             </MetricCard>
+            <MetricCard
+              label="Stance phase"
+              value={has(m.stance_pct) ? m.stance_pct.toFixed(0) : '--'}
+              unit={has(m.stance_pct) ? '%' : undefined}
+              delta={stanceDelta}
+              deltaType="neutral"
+            />
+            <MetricCard
+              label="Movement intensity"
+              value={has(m.intensity) ? m.intensity.toFixed(2) : '--'}
+              unit={has(m.intensity) ? 'm/s²' : undefined}
+              delta={intensityDelta}
+              deltaType="neutral"
+            />
           </div>
 
           <CadenceTrend history={cadenceHistory.values} labels={cadenceHistory.labels} />
