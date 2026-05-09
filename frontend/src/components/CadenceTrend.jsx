@@ -29,14 +29,16 @@ export default function CadenceTrend({ history, labels }) {
 
     const ctx = canvasRef.current.getContext('2d');
 
+    // Initialize with empty data; the second useEffect populates from props.
+    // Keeps this effect dependency-free so the chart instance survives.
     chartRef.current = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: labels,
+        labels: [],
         datasets: [
           {
             label: 'Target max',
-            data: Array(MAX_POINTS).fill(TARGET_MAX),
+            data: [],
             borderColor: 'rgba(15,166,114,0.35)',
             borderWidth: 1,
             borderDash: [4, 4],
@@ -46,7 +48,7 @@ export default function CadenceTrend({ history, labels }) {
           },
           {
             label: 'Target min',
-            data: Array(MAX_POINTS).fill(TARGET_MIN),
+            data: [],
             borderColor: 'rgba(15,166,114,0.35)',
             borderWidth: 1,
             borderDash: [4, 4],
@@ -55,7 +57,7 @@ export default function CadenceTrend({ history, labels }) {
           },
           {
             label: 'Cadence',
-            data: history,
+            data: [],
             borderColor: '#1668C1',
             borderWidth: 2.5,
             pointRadius: 3,
@@ -121,7 +123,7 @@ export default function CadenceTrend({ history, labels }) {
     <div className="cadence-card">
       <div className="cadence-header">
         <span className="cadence-title">Cadence trend</span>
-        <span className="cadence-range">Last 20 readings</span>
+        <span className="cadence-range">Last 10 seconds</span>
       </div>
       <div className="cadence-legend">
         <span className="legend-item">

@@ -1,10 +1,11 @@
 import './GaitCard.css';
 
 const CONFIG = {
-  Normal:    { bg: '#E1F1EA', color: '#0E7A53', icon: 'check' },
-  Unsteady:  { bg: '#FFF4DD', color: '#A56A12', icon: 'warn'  },
-  Limping:   { bg: '#FFEAD2', color: '#9F571B', icon: 'warn'  },
-  Shuffling: { bg: '#FFE2D5', color: '#A1431F', icon: 'alert' },
+  Stationary: { bg: '#EEF5FC', color: '#1E3A5F', icon: 'pause' },
+  Normal:     { bg: '#E1F1EA', color: '#0E7A53', icon: 'check' },
+  Unsteady:   { bg: '#FFF4DD', color: '#A56A12', icon: 'warn'  },
+  Limping:    { bg: '#FFEAD2', color: '#9F571B', icon: 'warn'  },
+  Shuffling:  { bg: '#FFE2D5', color: '#A1431F', icon: 'alert' },
 };
 
 function Icon({ type, color }) {
@@ -22,6 +23,12 @@ function Icon({ type, color }) {
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
     </svg>
   );
+  if (type === 'pause') return (
+    <svg viewBox="0 0 24 24" fill={color} width="22" height="22">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.8"
       strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
@@ -34,14 +41,18 @@ function Icon({ type, color }) {
 
 export default function GaitCard({ classification = 'Normal', confidence = null }) {
   const cfg = CONFIG[classification] || CONFIG.Normal;
-  const confText = confidence === null || confidence === undefined
+  const isStationary = classification === 'Stationary';
+  const confText = isStationary
+    ? 'Device at rest'
+    : confidence === null || confidence === undefined
     ? 'Awaiting data'
     : `Confidence: ${confidence}%`;
+  const headerLabel = isStationary ? 'Status' : 'Gait classification';
 
   return (
     <div className="gait-card" style={{ background: cfg.bg }}>
       <div className="gait-left">
-        <div className="gait-label">Gait classification</div>
+        <div className="gait-label">{headerLabel}</div>
         <div className="gait-class" style={{ color: cfg.color }}>{classification}</div>
         <div className="gait-conf">{confText}</div>
       </div>
