@@ -210,9 +210,31 @@ export default function LiveView() {
   const m = metrics || {};
   const has = (v) => v !== null && v !== undefined;
   const isIdle = m.state === 'idle';
-  const stateLabel = titleCase(m.state);
-  const stateDelta = has(m.state_confidence) ? `${m.state_confidence}% confident` : null;
+
+  // Prefer the new activity model (Walking/Turning/Stairs/Sitting/Standing/Idle)
+  // over the legacy LGBM state — it's more granular. Fall back to the
+  // legacy state if the new field isn't populated yet (first ~10s after
+  // connecting, before the buffer fills).
+  const activityLabel = m.activity || titleCase(m.state) || '--';
+  const activityDelta = has(m.activity_confidence)
+    ? `${m.activity_confidence}% confident`
+    : (has(m.state_confidence) ? `${m.state_confidence}% confident` : null);
   const speedKmh = has(m.speed) ? (m.speed * 3.6) : null;
+
+  // Parkinson's indicator. Model is advisory, not diagnostic. The label
+  // flips to "Atypical" only at high confidence (P(parkinsons) ≥ 0.90,
+  // applied in the backend). The percentage is the underlying PD likelihood
+  // in either case — useful even when the label stays "Typical".
+  const pdLabel = isIdle ? '--'
+    : m.parkinsons === 'parkinsons' ? 'Atypical'
+    : m.parkinsons === 'control'    ? 'Typical'
+    : '--';
+  const pdDelta = isIdle ? null
+    : has(m.parkinsons_confidence)
+      ? `${m.parkinsons_confidence}% PD likelihood`
+      : null;
+  const pdDeltaType = isIdle || !has(m.parkinsons_confidence) ? 'neutral'
+    : m.parkinsons === 'parkinsons' ? 'down' : 'neutral';
 
   function deltaFor(field, current, rangeFn, opts = {}) {
     if (current == null || isIdle) return null;
@@ -299,7 +321,7 @@ export default function LiveView() {
 
           <div className="section-label">Live activity</div>
           <div className="metrics-grid metrics-grid--3">
-            <MetricCard label="Activity" value={stateLabel} delta={stateDelta}
+            <MetricCard label="Activity" value={activityLabel} delta={activityDelta}
                         deltaType="neutral" accent="primary" />
             <MetricCard label="Walking speed"
               value={has(m.speed) ? m.speed.toFixed(2) : '--'}
@@ -311,6 +333,35 @@ export default function LiveView() {
               unit={has(m.cadence) ? 'spm' : undefined}
               delta={isIdle ? idleStr : dCadence?.text}
               deltaType={dCadence?.type ?? 'neutral'} />
+          </div>
+
+          <div className="section-label">Movement signature</div>
+          <div className="metrics-grid metrics-grid--2">
+            <MetricCard label="Parkinson's indicator (advisory)"
+              value={pdLabel}
+              delta={pdDelta}
+              deltaType={pdDeltaType} />
+            <MetricCard label="Activity breakdown"
+              value={
+                m.activity_distribution
+                  ? Object.entries(m.activity_distribution)
+                      .filter(([, v]) => v >= 5)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 1)
+                      .map(([k]) => k)[0] ?? '--'
+                  : '--'
+              }
+              delta={
+                m.activity_distribution
+                  ? Object.entries(m.activity_distribution)
+                      .filter(([, v]) => v >= 5)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 3)
+                      .map(([k, v]) => `${k} ${v.toFixed(0)}%`)
+                      .join(' · ')
+                  : null
+              }
+              deltaType="neutral" />
           </div>
 
           <div className="section-label">Stride mechanics</div>

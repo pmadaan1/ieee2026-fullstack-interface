@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import firebase_store
 from analysis.analyze import analyze_window
+from analysis.activity_analysis import predict_buffer as predict_activity_pd
 
 app = FastAPI()
 
@@ -25,7 +26,11 @@ app.add_middleware(
 # -- analysis config -------------------------------------------------------
 
 ANALYSIS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analysis")
-MODEL = joblib.load(os.path.join(ANALYSIS_DIR, "lgbm_model_typeClass"))
+LEGACY_MODEL_PATH = os.path.join(ANALYSIS_DIR, "models", "lgbm_model_typeClass")
+if not os.path.exists(LEGACY_MODEL_PATH):
+    # Older layout — fall back to the original location.
+    LEGACY_MODEL_PATH = os.path.join(ANALYSIS_DIR, "lgbm_model_typeClass")
+MODEL = joblib.load(LEGACY_MODEL_PATH)
 with open(os.path.join(ANALYSIS_DIR, "model_metadata.json")) as f:
     METADATA = json.load(f)
 
@@ -114,10 +119,17 @@ def _idle_metrics(intensity_value: float, jerk_value: float) -> dict:
         "step_time":        None,
         "stance_time":      None,
         "swing_time":       None,
+        # Activity model output is overridden during true idle so the UI
+        # doesn't display "Walking" while the device is at rest.
+        "activity":              "Idle",
+        "activity_confidence":   100,
+        "activity_distribution": {},
+        "parkinsons":            None,
+        "parkinsons_confidence": None,
     }
 
 
-def _flatten_metrics(insights: dict) -> dict:
+def _flatten_metrics(insights: dict, activity_pred: dict | None = None) -> dict:
     m = insights["metrics"]
     s = insights["state"]
     sig = insights.get("signals", {})
@@ -145,7 +157,7 @@ def _flatten_metrics(insights: dict) -> dict:
     # Stance / swing durations from the per-sample stance mask.
     stance_t, swing_t = _phase_durations(sig.get("stance_mask", []), FS)
 
-    return {
+    out = {
         "classification":   m["gait_classification"],
         "confidence":       round(float(m["gait_classification_confidence"]) * 100),
         "state":            s["predicted_state"],
@@ -167,6 +179,36 @@ def _flatten_metrics(insights: dict) -> dict:
         "stance_time":      round(stance_t, 2) if stance_t else None,
         "swing_time":       round(swing_t, 2)  if swing_t  else None,
     }
+    # Merge new activity / Parkinson's predictions when available.
+    if activity_pred:
+        out.update({
+            "activity":              activity_pred.get("activity"),
+            "activity_confidence":   activity_pred.get("activity_confidence"),
+            "activity_distribution": activity_pred.get("activity_distribution", {}),
+            "parkinsons":            activity_pred.get("parkinsons"),
+            "parkinsons_confidence": activity_pred.get("parkinsons_confidence"),
+        })
+    else:
+        out.update({
+            "activity":              None,
+            "activity_confidence":   None,
+            "activity_distribution": {},
+            "parkinsons":            None,
+            "parkinsons_confidence": None,
+        })
+    return out
+
+
+def _compute_metrics(buffer_rows: list[dict]) -> dict:
+    """Run the legacy gait analysis + new activity/PD models on one buffer.
+
+    Both calls are CPU-bound; running them sequentially in a single
+    asyncio.to_thread keeps overhead low and avoids two round-trips.
+    """
+    df = _buffer_to_df(buffer_rows)
+    insights = analyze_window(df, FS, MODEL, METADATA, False)  # is_si=False (raw counts)
+    activity_pred = predict_activity_pd(buffer_rows)
+    return _flatten_metrics(insights, activity_pred=activity_pred)
 
 
 def _flush_minute(uid: str, current_minute_ms: int, samples: list[dict]) -> None:
@@ -204,12 +246,8 @@ async def websocket_endpoint(websocket: WebSocket):
             now = time.time()
             if len(buffer) == BUFFER_LEN and (now - last_analyzed) >= ANALYZE_EVERY_S:
                 last_analyzed = now
-                df = _buffer_to_df(buffer)
                 try:
-                    insights = await asyncio.to_thread(
-                        analyze_window, df, FS, MODEL, METADATA, False  # is_si=False (raw counts)
-                    )
-                    metrics = _flatten_metrics(insights)
+                    metrics = await asyncio.to_thread(_compute_metrics, list(buffer))
                     await websocket.send_text(json.dumps({"metrics": metrics}))
 
                     # Bucket into the current minute and flush at boundaries.

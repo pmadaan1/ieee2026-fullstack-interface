@@ -126,7 +126,28 @@ export function generateInsights(buckets, prevBuckets, rangeLabel) {
     });
   }
 
-  return out.slice(0, 5);  // cap at 5 — UI gets noisy beyond that.
+  // 7. Parkinson's likelihood (advisory).
+  const pdAvg = avg('pd_likelihood');
+  if (pdAvg != null) {
+    const pdMin = buckets.reduce((s, b) => s + (b.pd_minutes || 0), 0);
+    const totalMin = buckets.reduce((s, b) => s + (b.walking_minutes || 0), 0);
+    const pdPct = totalMin > 0 ? (pdMin / totalMin) * 100 : 0;
+    if (pdAvg >= 65 && pdPct >= 50) {
+      out.push({
+        severity: 'concern',
+        title: "Movement signature flagged as atypical",
+        body: `The Parkinson's-indicator model averaged ${pdAvg.toFixed(0)}% likelihood ${rangeLabel}, with ${pdPct.toFixed(0)}% of active minutes flagged. This is an advisory signal, not a diagnosis — share with a clinician if it persists.`,
+      });
+    } else if (pdAvg < 40) {
+      out.push({
+        severity: 'positive',
+        title: 'Movement signature looks typical',
+        body: `The advisory model averaged ${pdAvg.toFixed(0)}% Parkinson's-likelihood ${rangeLabel} — well below the flag threshold.`,
+      });
+    }
+  }
+
+  return out.slice(0, 6);  // cap at 6 — UI gets noisy beyond that.
 }
 
 export default function InsightsCard({ insights }) {

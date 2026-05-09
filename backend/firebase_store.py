@@ -50,29 +50,66 @@ _disabled = False
 def init() -> None:
     """Initialize firebase-admin once, idempotent. Safe to call repeatedly.
 
-    If the credentials file is missing, marks the store as disabled and all
-    write_minute() calls become no-ops (with a one-time warning logged).
+    Credentials are loaded from (in order):
+      1. FIREBASE_CREDENTIALS_JSON env var — raw JSON string. Use this for
+         hosted environments (Railway, Heroku, etc.) where you can't ship
+         a file. Paste the entire service-account JSON into one variable.
+      2. FIREBASE_CREDENTIALS env var — filesystem path to the JSON.
+         Defaults to backend/firebase-credentials.json for local dev.
+
+    If neither is available, the store stays disabled and all writes are
+    no-ops, so the live pipeline still runs.
     """
     global _db, _initialized, _disabled
     if _initialized:
         return
     _initialized = True
 
-    cred_path = os.environ.get(
-        "FIREBASE_CREDENTIALS",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-credentials.json"),
-    )
-    if not os.path.exists(cred_path):
-        print(f"[firebase_store] credentials not found at {cred_path} — long-term storage DISABLED.")
+    try:
+        from firebase_admin import credentials, firestore, initialize_app
+    except ImportError:
+        print("[firebase_store] firebase-admin not installed — long-term storage DISABLED.")
         _disabled = True
         return
 
+    cred = None
+    source = None
+
+    # Option 1: full JSON pasted into an env var.
+    raw_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+    if raw_json:
+        import json as _json
+        try:
+            cred = credentials.Certificate(_json.loads(raw_json))
+            source = "FIREBASE_CREDENTIALS_JSON env var"
+        except Exception as exc:
+            print(f"[firebase_store] FIREBASE_CREDENTIALS_JSON failed to parse ({exc}) — disabled.")
+            _disabled = True
+            return
+
+    # Option 2: filesystem path (local dev default).
+    if cred is None:
+        cred_path = os.environ.get(
+            "FIREBASE_CREDENTIALS",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-credentials.json"),
+        )
+        if not os.path.exists(cred_path):
+            print(f"[firebase_store] no credentials found "
+                  f"(checked FIREBASE_CREDENTIALS_JSON env var, then {cred_path}) — DISABLED.")
+            _disabled = True
+            return
+        try:
+            cred = credentials.Certificate(cred_path)
+            source = os.path.basename(cred_path)
+        except Exception as exc:
+            print(f"[firebase_store] credentials file failed to load ({exc}) — disabled.")
+            _disabled = True
+            return
+
     try:
-        from firebase_admin import credentials, firestore, initialize_app
-        cred = credentials.Certificate(cred_path)
         initialize_app(cred)
         _db = firestore.client()
-        print(f"[firebase_store] ENABLED — writing to project from {os.path.basename(cred_path)}")
+        print(f"[firebase_store] ENABLED — credentials from {source}")
     except Exception as exc:                        # pylint: disable=broad-except
         print(f"[firebase_store] init FAILED ({exc}) — long-term storage disabled.")
         _disabled = True
@@ -89,6 +126,15 @@ NUMERIC_FIELDS = (
     "asymmetry", "variability",
     "stance_pct", "stance_time", "swing_time", "step_time",
     "intensity", "jerk",
+    "parkinsons_confidence",         # mean PD likelihood over the minute (0–100)
+    "activity_confidence",           # mean confidence of dominant activity
+)
+
+CATEGORICAL_FIELDS = (
+    "classification",                # gait classification (Normal/Limping/...)
+    "state",                         # legacy LGBM state (idle/walking/running)
+    "activity",                      # new activity model (Walking/Turning/...)
+    "parkinsons",                    # control / parkinsons
 )
 
 
@@ -111,7 +157,7 @@ def aggregate_minute(samples: Iterable[dict]) -> dict:
         out[field] = round(sum(vals) / len(vals), 3) if vals else None
 
     # Counts + majority for categorical fields.
-    for field in ("classification", "state"):
+    for field in CATEGORICAL_FIELDS:
         counts: dict[str, int] = {}
         for s in samples:
             v = s.get(field)

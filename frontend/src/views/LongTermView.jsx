@@ -33,6 +33,17 @@ function bucketize(rows, bucketHours) {
       const vs = xs.map(x => x[field]).filter(v => v != null && !isNaN(v));
       return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
     };
+    // Sum activity_counts maps across the bucket so we can show the
+    // full breakdown (% time in each activity) over the period.
+    const activityCounts = {};
+    let pdMinutes = 0;
+    for (const x of xs) {
+      const counts = x.activity_counts || {};
+      for (const [k, v] of Object.entries(counts)) {
+        activityCounts[k] = (activityCounts[k] || 0) + v;
+      }
+      if (x.parkinsons_majority === 'parkinsons') pdMinutes += 1;
+    }
     out.push({
       ts: key,
       cadence:     numeric('cadence'),
@@ -46,7 +57,10 @@ function bucketize(rows, bucketHours) {
       swing_time:  numeric('swing_time'),
       step_time:   numeric('step_time'),
       intensity:   numeric('intensity'),
-      walking_minutes: xs.length,    // each minute doc ≈ 1 minute of activity
+      walking_minutes: xs.length,
+      pd_minutes:    pdMinutes,
+      pd_likelihood: numeric('parkinsons_confidence'),  // mean PD prob, 0–100
+      activity_counts: activityCounts,
     });
   }
   return out;
@@ -61,7 +75,8 @@ function formatBucketLabel(ts, bucketHours) {
 function summaryAverages(buckets) {
   const out = {};
   const fields = ['cadence', 'speed', 'stride', 'clearance', 'asymmetry',
-                  'variability', 'stance_pct', 'intensity', 'stance_time', 'swing_time'];
+                  'variability', 'stance_pct', 'intensity', 'stance_time',
+                  'swing_time', 'pd_likelihood'];
   for (const f of fields) {
     const xs = buckets.map(b => b[f]).filter(v => v != null);
     out[f] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
@@ -223,6 +238,82 @@ export default function LongTermView() {
               deltaType="neutral" />
           </div>
 
+          <div className="section-label">Activity & movement signature</div>
+          <div className="activity-breakdown">
+            {(() => {
+              const total = buckets.reduce((sum, b) =>
+                sum + Object.values(b.activity_counts || {}).reduce((s, v) => s + v, 0), 0);
+              if (!total) return <div className="lt-empty"><span>No activity breakdown yet.</span></div>;
+              const merged = {};
+              buckets.forEach(b => Object.entries(b.activity_counts || {}).forEach(([k, v]) => {
+                merged[k] = (merged[k] || 0) + v;
+              }));
+              const palette = {
+                Walking: '#1668C1', Turning: '#4FA0EE', Stairs: '#0FA672',
+                Standing: '#9AAEC4', Sitting: '#6F89A6', Idle: '#9AAEC4',
+                Unknown: '#C9D5E2',
+              };
+              return (
+                <>
+                  <div className="activity-bar">
+                    {Object.entries(merged)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([k, v]) => {
+                        const pct = (v / total) * 100;
+                        if (pct < 1) return null;
+                        return (
+                          <div key={k}
+                               className="activity-bar-seg"
+                               style={{ width: `${pct}%`, background: palette[k] || '#9AAEC4' }}
+                               title={`${k}: ${pct.toFixed(1)}%`} />
+                        );
+                      })}
+                  </div>
+                  <div className="activity-legend">
+                    {Object.entries(merged)
+                      .sort((a, b) => b[1] - a[1])
+                      .filter(([, v]) => (v / total) * 100 >= 1)
+                      .map(([k, v]) => (
+                        <span key={k} className="activity-legend-item">
+                          <span className="activity-legend-dot"
+                                style={{ background: palette[k] || '#9AAEC4' }} />
+                          {k} <strong>{((v / total) * 100).toFixed(0)}%</strong>
+                        </span>
+                      ))}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="metrics-grid metrics-grid--2">
+            <MetricCard
+              label="Parkinson's likelihood (advisory)"
+              value={summary.pd_likelihood != null ? summary.pd_likelihood.toFixed(0) : '--'}
+              unit={summary.pd_likelihood != null ? '%' : undefined}
+              delta={(() => {
+                const pdMin = buckets.reduce((s, b) => s + (b.pd_minutes || 0), 0);
+                const totalMin = buckets.reduce((s, b) => s + (b.walking_minutes || 0), 0);
+                if (!totalMin) return null;
+                return `${((pdMin / totalMin) * 100).toFixed(0)}% of minutes flagged`;
+              })()}
+              deltaType={summary.pd_likelihood != null && summary.pd_likelihood >= 65 ? 'down' : 'neutral'}
+            />
+            <MetricCard
+              label="Most common activity"
+              value={(() => {
+                const merged = {};
+                buckets.forEach(b => Object.entries(b.activity_counts || {}).forEach(([k, v]) => {
+                  merged[k] = (merged[k] || 0) + v;
+                }));
+                const top = Object.entries(merged).sort((a, b) => b[1] - a[1])[0];
+                return top ? top[0] : '--';
+              })()}
+              delta="dominant during this period"
+              deltaType="neutral"
+            />
+          </div>
+
           <div className="section-label">Trends over {range.label}</div>
           <TimeSeriesChart
             title="Walking speed" range={range.label} unit="m/s"
@@ -255,6 +346,12 @@ export default function LongTermView() {
             title="Active minutes per bucket" range={range.label} unit="min"
             labels={labels} values={buckets.map(b => b.walking_minutes)}
             color="#4FA0EE" yMin={0}
+          />
+          <TimeSeriesChart
+            title="Parkinson's likelihood (advisory)" range={range.label} unit="%"
+            labels={labels} values={buckets.map(b => b.pd_likelihood)}
+            color="#9F571B" yMin={0} yMax={100}
+            targetMin={0} targetMax={50}
           />
         </>
       )}
