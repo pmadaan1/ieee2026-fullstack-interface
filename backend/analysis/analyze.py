@@ -203,13 +203,30 @@ def gait_similarity(peaks: np.ndarray, fs: int = 50):
 
 def classify_gait(cadence: float, mean_clearance_cm: float,
                   asymmetry: float, cv: float):
-    if asymmetry > 0.15:
-        return "Limping", min(asymmetry / 0.30, 1.0)
-    if mean_clearance_cm < 5 and cadence > 110:
-        return "Shuffling", min((10 - mean_clearance_cm) / 10, 1.0)
-    if cv > 0.12:
-        return "Unsteady", min(cv / 0.20, 1.0)
-    return "Normal", 1.0 - max(cv / 0.10, asymmetry / 0.10, 0)
+    """Two-state classification: Normal or Unsteady.
+
+    Earlier Limping and Shuffling labels were dropped because:
+      - Limping required true L/R asymmetry; one foot sensor only gives
+        consecutive-step asymmetry, which is too noisy to label clinically.
+      - Shuffling required reliable foot clearance; the ZUPT integrator
+        is currently unreliable (capped at 30 cm to mask drift).
+
+    Stride-time variability (CV) is the most robust single signal of
+    irregular gait we can compute from a single foot IMU. The threshold
+    is intentionally lenient — most healthy walking should classify as
+    Normal even with everyday variation.
+    """
+    # Threshold tuned for real-world data where step-detection false
+    # positives inflate apparent CV. Default is intentionally lenient —
+    # bias toward Normal, only flag truly disordered gait.
+    UNSTEADY_THRESHOLD = 0.40
+    if cv > UNSTEADY_THRESHOLD:
+        # Confidence scales from 0.5 at threshold up to 1.0 at 2x threshold.
+        confidence = min(0.5 + (cv - UNSTEADY_THRESHOLD) / UNSTEADY_THRESHOLD, 1.0)
+        return "Unsteady", confidence
+    # Normal: confidence drops smoothly as CV approaches the threshold.
+    confidence = 1.0 - (cv / UNSTEADY_THRESHOLD) * 0.5
+    return "Normal", confidence
 
 
 # -- additional metrics -----------------------------------------------------

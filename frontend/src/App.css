@@ -319,39 +319,77 @@ body {
   color: var(--ink-400);
 }
 
-/* ---------- activity breakdown bar (long-term) ---------- */
+/* ---------- activity breakdown bar (reusable) ---------- */
 
-.activity-breakdown {
+.act-card {
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: 14px;
-  padding: 16px 18px;
-  margin-bottom: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
 
-.activity-bar {
+.act-card--lg { padding: 18px 20px; }
+.act-card--sm { padding: 10px 12px; }
+
+.act-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-700);
+  margin-bottom: 10px;
+  letter-spacing: -0.005em;
+}
+
+.act-empty {
+  font-size: 12.5px;
+  color: var(--ink-400);
+  padding: 10px 0;
+  text-align: center;
+}
+
+.act-bar {
   display: flex;
   width: 100%;
-  height: 18px;
+  height: 26px;
   border-radius: 99px;
   overflow: hidden;
   background: var(--brand-50);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
 }
 
-.activity-bar-seg {
+.act-card--lg .act-bar { height: 36px; }
+.act-card--sm .act-bar { height: 18px; }
+
+.act-bar-seg {
   height: 100%;
-  transition: width 0.4s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.activity-legend {
+.act-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.act-card--lg .act-bar-label { font-size: 12px; }
+
+.act-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 12px;
 }
 
-.activity-legend-item {
+.act-legend-item {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -360,16 +398,83 @@ body {
   font-weight: 500;
 }
 
-.activity-legend-dot {
+.act-legend-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   display: inline-block;
 }
 
-.activity-legend-item strong {
+.act-legend-item strong {
   color: var(--ink-900);
   font-weight: 600;
+}
+
+/* ---------- hero insights block (long-term) ---------- */
+
+.insights-hero {
+  margin-bottom: 18px;
+}
+
+.insights-hero .insights-card {
+  border: 1px solid rgba(22, 104, 193, 0.15);
+  background: linear-gradient(135deg, #FFFFFF 0%, var(--brand-50) 100%);
+  box-shadow: 0 6px 20px rgba(22, 104, 193, 0.08);
+  padding: 1.4rem 1.5rem;
+}
+
+.insights-hero .insights-title {
+  font-size: 18px;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+.insights-hero .insight-item {
+  padding: 14px 16px;
+}
+
+.insights-hero .insight-head {
+  font-size: 14px;
+}
+
+.insights-hero .insight-text {
+  font-size: 13px;
+}
+
+/* ---------- compact summary at the bottom of long-term ---------- */
+
+.section-label--muted {
+  color: var(--ink-300);
+  margin-top: 30px;
+}
+
+.metrics-grid--compact .metric-card {
+  padding: 10px 12px;
+  gap: 2px;
+  box-shadow: none;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.metrics-grid--compact .metric-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.metrics-grid--compact .metric-label {
+  font-size: 10px;
+}
+
+.metrics-grid--compact .metric-value {
+  font-size: 19px;
+}
+
+.metrics-grid--compact .metric-unit {
+  font-size: 11px;
+}
+
+.metrics-grid--compact .metric-delta {
+  font-size: 10.5px;
 }
 
 /* ---------- live badge ---------- */

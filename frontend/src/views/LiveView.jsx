@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import GaitCard from '../components/GaitCard';
 import MetricCard from '../components/MetricCard';
 import CadenceTrend from '../components/CadenceTrend';
+import ActivityBreakdownBar from '../components/ActivityBreakdownBar';
 
 const MAX_POINTS    = 20;                          // 20 ticks * 0.5s = 10s graph
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
@@ -320,7 +321,7 @@ export default function LiveView() {
           </div>
 
           <div className="section-label">Live activity</div>
-          <div className="metrics-grid metrics-grid--3">
+          <div className="metrics-grid metrics-grid--2">
             <MetricCard label="Activity" value={activityLabel} delta={activityDelta}
                         deltaType="neutral" accent="primary" />
             <MetricCard label="Walking speed"
@@ -328,12 +329,13 @@ export default function LiveView() {
               unit={has(m.speed) ? 'm/s' : undefined}
               delta={isIdle ? idleStr : (dSpeed?.text ?? (speedKmh != null ? `${speedKmh.toFixed(1)} km/h` : null))}
               deltaType={dSpeed?.type ?? 'neutral'} />
-            <MetricCard label="Cadence"
-              value={has(m.cadence) ? m.cadence : '--'}
-              unit={has(m.cadence) ? 'spm' : undefined}
-              delta={isIdle ? idleStr : dCadence?.text}
-              deltaType={dCadence?.type ?? 'neutral'} />
           </div>
+
+          <ActivityBreakdownBar
+            distribution={isIdle ? null : m.activity_distribution}
+            title="Activity breakdown — last 10 s"
+            size="md"
+          />
 
           <div className="section-label">Movement signature</div>
           <div className="metrics-grid metrics-grid--2">
@@ -341,27 +343,11 @@ export default function LiveView() {
               value={pdLabel}
               delta={pdDelta}
               deltaType={pdDeltaType} />
-            <MetricCard label="Activity breakdown"
-              value={
-                m.activity_distribution
-                  ? Object.entries(m.activity_distribution)
-                      .filter(([, v]) => v >= 5)
-                      .sort((a, b) => b[1] - a[1])
-                      .slice(0, 1)
-                      .map(([k]) => k)[0] ?? '--'
-                  : '--'
-              }
-              delta={
-                m.activity_distribution
-                  ? Object.entries(m.activity_distribution)
-                      .filter(([, v]) => v >= 5)
-                      .sort((a, b) => b[1] - a[1])
-                      .slice(0, 3)
-                      .map(([k, v]) => `${k} ${v.toFixed(0)}%`)
-                      .join(' · ')
-                  : null
-              }
-              deltaType="neutral" />
+            <MetricCard label="Cadence"
+              value={has(m.cadence) ? m.cadence : '--'}
+              unit={has(m.cadence) ? 'spm' : undefined}
+              delta={isIdle ? idleStr : dCadence?.text}
+              deltaType={dCadence?.type ?? 'neutral'} />
           </div>
 
           <div className="section-label">Stride mechanics</div>
