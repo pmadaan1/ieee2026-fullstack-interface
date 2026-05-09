@@ -4,8 +4,6 @@ const CONFIG = {
   Stationary: { bg: '#EEF5FC', color: '#1E3A5F', icon: 'pause' },
   Normal:     { bg: '#E1F1EA', color: '#0E7A53', icon: 'check' },
   Unsteady:   { bg: '#FFF4DD', color: '#A56A12', icon: 'warn'  },
-  Limping:    { bg: '#FFEAD2', color: '#9F571B', icon: 'warn'  },
-  Shuffling:  { bg: '#FFE2D5', color: '#A1431F', icon: 'alert' },
 };
 
 function Icon({ type, color }) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import MetricCard from '../components/MetricCard';
 import TimeSeriesChart from '../components/TimeSeriesChart';
+import ActivityBreakdownBar from '../components/ActivityBreakdownBar';
 import InsightsCard, { generateInsights } from '../components/InsightsCard';
 import { fetchMinutes, isFirebaseEnabled, DEFAULT_UID } from '../firebase';
 
@@ -190,171 +191,137 @@ export default function LongTermView() {
         </div>
       )}
 
-      {currRows.length > 0 && (
-        <>
-          <InsightsCard insights={insights} />
+      {currRows.length > 0 && (() => {
+        // Aggregate activity counts once for the breakdown bar.
+        const mergedActivities = {};
+        buckets.forEach(b => Object.entries(b.activity_counts || {}).forEach(([k, v]) => {
+          mergedActivities[k] = (mergedActivities[k] || 0) + v;
+        }));
 
-          <div className="section-label">Period averages</div>
-          <div className="metrics-grid metrics-grid--3">
-            <MetricCard label="Walking speed"
-              value={summary.speed != null ? summary.speed.toFixed(2) : '--'}
-              unit={summary.speed != null ? 'm/s' : undefined}
-              delta={trendDelta(summary.speed, prevSummary.speed)?.text}
-              deltaType="neutral"
-              accent="primary" />
-            <MetricCard label="Cadence"
-              value={summary.cadence != null ? summary.cadence.toFixed(0) : '--'}
-              unit={summary.cadence != null ? 'spm' : undefined}
-              delta={trendDelta(summary.cadence, prevSummary.cadence)?.text}
-              deltaType="neutral" />
-            <MetricCard label="Active time"
-              value={summary.walking_minutes ? Math.round(summary.walking_minutes) : '--'}
-              unit={summary.walking_minutes ? 'min' : undefined}
-              delta={trendDelta(summary.walking_minutes, prevSummary.walking_minutes)?.text}
-              deltaType="neutral" />
-          </div>
+        const totalMin   = buckets.reduce((s, b) => s + (b.walking_minutes || 0), 0);
+        const pdMin      = buckets.reduce((s, b) => s + (b.pd_minutes || 0), 0);
+        const pdFlaggedPct = totalMin > 0 ? (pdMin / totalMin) * 100 : 0;
 
-          <div className="section-label">Stride mechanics</div>
-          <div className="metrics-grid metrics-grid--4">
-            <MetricCard label="Stride length"
-              value={summary.stride != null ? summary.stride.toFixed(2) : '--'}
-              unit={summary.stride != null ? 'm' : undefined}
-              delta={trendDelta(summary.stride, prevSummary.stride)?.text}
-              deltaType="neutral" />
-            <MetricCard label="Step asymmetry"
-              value={summary.asymmetry != null ? summary.asymmetry.toFixed(1) : '--'}
-              unit={summary.asymmetry != null ? '%' : undefined}
-              delta={trendDelta(summary.asymmetry, prevSummary.asymmetry)?.text}
-              deltaType="neutral" />
-            <MetricCard label="Stride variability"
-              value={summary.variability != null ? summary.variability.toFixed(1) : '--'}
-              unit={summary.variability != null ? '%' : undefined}
-              delta={trendDelta(summary.variability, prevSummary.variability)?.text}
-              deltaType="neutral" />
-            <MetricCard label="Foot clearance"
-              value={summary.clearance != null ? summary.clearance.toFixed(1) : '--'}
-              unit={summary.clearance != null ? 'cm' : undefined}
-              delta={trendDelta(summary.clearance, prevSummary.clearance)?.text}
-              deltaType="neutral" />
-          </div>
+        return (
+          <>
+            {/* ----- HERO: insights are the headline ----- */}
+            <div className="insights-hero">
+              <InsightsCard insights={insights} />
+            </div>
 
-          <div className="section-label">Activity & movement signature</div>
-          <div className="activity-breakdown">
-            {(() => {
-              const total = buckets.reduce((sum, b) =>
-                sum + Object.values(b.activity_counts || {}).reduce((s, v) => s + v, 0), 0);
-              if (!total) return <div className="lt-empty"><span>No activity breakdown yet.</span></div>;
-              const merged = {};
-              buckets.forEach(b => Object.entries(b.activity_counts || {}).forEach(([k, v]) => {
-                merged[k] = (merged[k] || 0) + v;
-              }));
-              const palette = {
-                Walking: '#1668C1', Turning: '#4FA0EE', Stairs: '#0FA672',
-                Standing: '#9AAEC4', Sitting: '#6F89A6', Idle: '#9AAEC4',
-                Unknown: '#C9D5E2',
-              };
-              return (
-                <>
-                  <div className="activity-bar">
-                    {Object.entries(merged)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([k, v]) => {
-                        const pct = (v / total) * 100;
-                        if (pct < 1) return null;
-                        return (
-                          <div key={k}
-                               className="activity-bar-seg"
-                               style={{ width: `${pct}%`, background: palette[k] || '#9AAEC4' }}
-                               title={`${k}: ${pct.toFixed(1)}%`} />
-                        );
-                      })}
-                  </div>
-                  <div className="activity-legend">
-                    {Object.entries(merged)
-                      .sort((a, b) => b[1] - a[1])
-                      .filter(([, v]) => (v / total) * 100 >= 1)
-                      .map(([k, v]) => (
-                        <span key={k} className="activity-legend-item">
-                          <span className="activity-legend-dot"
-                                style={{ background: palette[k] || '#9AAEC4' }} />
-                          {k} <strong>{((v / total) * 100).toFixed(0)}%</strong>
-                        </span>
-                      ))}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-
-          <div className="metrics-grid metrics-grid--2">
-            <MetricCard
-              label="Parkinson's likelihood (advisory)"
-              value={summary.pd_likelihood != null ? summary.pd_likelihood.toFixed(0) : '--'}
-              unit={summary.pd_likelihood != null ? '%' : undefined}
-              delta={(() => {
-                const pdMin = buckets.reduce((s, b) => s + (b.pd_minutes || 0), 0);
-                const totalMin = buckets.reduce((s, b) => s + (b.walking_minutes || 0), 0);
-                if (!totalMin) return null;
-                return `${((pdMin / totalMin) * 100).toFixed(0)}% of minutes flagged`;
-              })()}
-              deltaType={summary.pd_likelihood != null && summary.pd_likelihood >= 65 ? 'down' : 'neutral'}
+            {/* ----- Activity breakdown — big colored bar ----- */}
+            <div className="section-label">How you spent your time</div>
+            <ActivityBreakdownBar
+              distribution={mergedActivities}
+              title={null}
+              size="lg"
             />
-            <MetricCard
-              label="Most common activity"
-              value={(() => {
-                const merged = {};
-                buckets.forEach(b => Object.entries(b.activity_counts || {}).forEach(([k, v]) => {
-                  merged[k] = (merged[k] || 0) + v;
-                }));
-                const top = Object.entries(merged).sort((a, b) => b[1] - a[1])[0];
-                return top ? top[0] : '--';
-              })()}
-              delta="dominant during this period"
-              deltaType="neutral"
-            />
-          </div>
 
-          <div className="section-label">Trends over {range.label}</div>
-          <TimeSeriesChart
-            title="Walking speed" range={range.label} unit="m/s"
-            labels={labels} values={buckets.map(b => b.speed)}
-            color="#1668C1" yMin={0} yMax={2.0}
-            targetMin={1.2} targetMax={1.8}
-          />
-          <TimeSeriesChart
-            title="Cadence" range={range.label} unit="spm"
-            labels={labels} values={buckets.map(b => b.cadence)}
-            color="#2A82DA" yMin={60} yMax={150}
-            targetMin={100} targetMax={120}
-          />
-          <TimeSeriesChart
-            title="Step asymmetry" range={range.label} unit="%"
-            labels={labels} values={buckets.map(b => b.asymmetry)}
-            color="#C97E1A" yMin={0} yMax={30}
-          />
-          <TimeSeriesChart
-            title="Stride variability" range={range.label} unit="%"
-            labels={labels} values={buckets.map(b => b.variability)}
-            color="#9F571B" yMin={0} yMax={25}
-          />
-          <TimeSeriesChart
-            title="Foot clearance" range={range.label} unit="cm"
-            labels={labels} values={buckets.map(b => b.clearance)}
-            color="#0FA672" yMin={0} yMax={30}
-          />
-          <TimeSeriesChart
-            title="Active minutes per bucket" range={range.label} unit="min"
-            labels={labels} values={buckets.map(b => b.walking_minutes)}
-            color="#4FA0EE" yMin={0}
-          />
-          <TimeSeriesChart
-            title="Parkinson's likelihood (advisory)" range={range.label} unit="%"
-            labels={labels} values={buckets.map(b => b.pd_likelihood)}
-            color="#9F571B" yMin={0} yMax={100}
-            targetMin={0} targetMax={50}
-          />
-        </>
-      )}
+            {/* ----- Trend charts (the visual story) ----- */}
+            <div className="section-label">Walking speed over {range.label}</div>
+            <TimeSeriesChart
+              title="Walking speed" range={range.label} unit="m/s"
+              labels={labels} values={buckets.map(b => b.speed)}
+              color="#1668C1" yMin={0} yMax={2.0}
+              targetMin={1.2} targetMax={1.8}
+            />
+
+            <div className="section-label">Stride rhythm</div>
+            <TimeSeriesChart
+              title="Cadence" range={range.label} unit="spm"
+              labels={labels} values={buckets.map(b => b.cadence)}
+              color="#2A82DA" yMin={60} yMax={150}
+              targetMin={100} targetMax={120}
+            />
+            <TimeSeriesChart
+              title="Stride variability" range={range.label} unit="%"
+              labels={labels} values={buckets.map(b => b.variability)}
+              color="#C97E1A" yMin={0} yMax={25}
+              targetMin={0} targetMax={3}
+            />
+            <TimeSeriesChart
+              title="Step asymmetry" range={range.label} unit="%"
+              labels={labels} values={buckets.map(b => b.asymmetry)}
+              color="#9F571B" yMin={0} yMax={30}
+              targetMin={0} targetMax={5}
+            />
+
+            <div className="section-label">Foot mechanics</div>
+            <TimeSeriesChart
+              title="Foot clearance" range={range.label} unit="cm"
+              labels={labels} values={buckets.map(b => b.clearance)}
+              color="#0FA672" yMin={0} yMax={30}
+              targetMin={15} targetMax={30}
+            />
+            <TimeSeriesChart
+              title="Stride length" range={range.label} unit="m"
+              labels={labels} values={buckets.map(b => b.stride)}
+              color="#4FA0EE" yMin={0} yMax={1.6}
+              targetMin={0.6} targetMax={1.6}
+            />
+
+            <div className="section-label">Activity volume</div>
+            <TimeSeriesChart
+              title="Active minutes" range={range.label} unit="min"
+              labels={labels} values={buckets.map(b => b.walking_minutes)}
+              color="#1668C1" yMin={0}
+            />
+
+            <div className="section-label">Movement signature (advisory)</div>
+            <TimeSeriesChart
+              title="Parkinson's likelihood" range={range.label} unit="%"
+              labels={labels} values={buckets.map(b => b.pd_likelihood)}
+              color="#9F571B" yMin={0} yMax={100}
+              targetMin={0} targetMax={40}
+            />
+
+            {/* ----- Compact summary numbers (de-emphasized footer) ----- */}
+            <div className="section-label section-label--muted">At-a-glance numbers</div>
+            <div className="metrics-grid metrics-grid--4 metrics-grid--compact">
+              <MetricCard label="Avg walking speed"
+                value={summary.speed != null ? summary.speed.toFixed(2) : '--'}
+                unit={summary.speed != null ? 'm/s' : undefined}
+                delta={trendDelta(summary.speed, prevSummary.speed)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Avg cadence"
+                value={summary.cadence != null ? summary.cadence.toFixed(0) : '--'}
+                unit={summary.cadence != null ? 'spm' : undefined}
+                delta={trendDelta(summary.cadence, prevSummary.cadence)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Active time"
+                value={totalMin ? Math.round(totalMin) : '--'}
+                unit={totalMin ? 'min' : undefined}
+                delta={trendDelta(summary.walking_minutes, prevSummary.walking_minutes)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Avg stride"
+                value={summary.stride != null ? summary.stride.toFixed(2) : '--'}
+                unit={summary.stride != null ? 'm' : undefined}
+                delta={trendDelta(summary.stride, prevSummary.stride)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Avg asymmetry"
+                value={summary.asymmetry != null ? summary.asymmetry.toFixed(1) : '--'}
+                unit={summary.asymmetry != null ? '%' : undefined}
+                delta={trendDelta(summary.asymmetry, prevSummary.asymmetry)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Avg variability"
+                value={summary.variability != null ? summary.variability.toFixed(1) : '--'}
+                unit={summary.variability != null ? '%' : undefined}
+                delta={trendDelta(summary.variability, prevSummary.variability)?.text}
+                deltaType="neutral" />
+              <MetricCard label="Avg clearance"
+                value={summary.clearance != null ? summary.clearance.toFixed(1) : '--'}
+                unit={summary.clearance != null ? 'cm' : undefined}
+                delta={trendDelta(summary.clearance, prevSummary.clearance)?.text}
+                deltaType="neutral" />
+              <MetricCard label="PD likelihood"
+                value={summary.pd_likelihood != null ? summary.pd_likelihood.toFixed(0) : '--'}
+                unit={summary.pd_likelihood != null ? '%' : undefined}
+                delta={`${pdFlaggedPct.toFixed(0)}% of min flagged`}
+                deltaType={summary.pd_likelihood != null && summary.pd_likelihood >= 65 ? 'down' : 'neutral'} />
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
