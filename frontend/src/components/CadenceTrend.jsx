@@ -15,7 +15,6 @@ Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryS
 
 const TARGET_MIN = 100;
 const TARGET_MAX = 120;
-const MAX_POINTS = 20;
 
 export default function CadenceTrend({ history, labels }) {
   const canvasRef = useRef(null);
