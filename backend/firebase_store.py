@@ -1,0 +1,159 @@
+"""Firebase Firestore writer for SteadyStep long-term storage.
+
+Storage model
+-------------
+users/{uid}/minutes/{epoch_ms}   one doc per minute of activity (averaged
+                                  across the ~120 analysis ticks in that
+                                  minute when running at 0.5 s cadence).
+
+Each doc looks like:
+    {
+      ts_ms, minute_iso, ticks,
+      cadence, speed, stride, clearance,
+      asymmetry, variability,
+      stance_pct, stance_time, swing_time, step_time,
+      intensity, jerk, steps_total,
+      classification_majority, state_majority,
+      classification_counts: {Normal: 90, Unsteady: 8, ...},
+      state_counts: {walking: 100, running: 5, ...},
+    }
+
+Setup
+-----
+1. Create a Firebase project at console.firebase.google.com.
+2. Enable Firestore in production mode.
+3. Project Settings → Service Accounts → Generate new private key.
+4. Save the downloaded JSON to backend/firebase-credentials.json
+   (already gitignored).
+5. Set env var:
+       export FIREBASE_CREDENTIALS=./firebase-credentials.json
+   (or rely on the default path resolution below).
+
+Without credentials, every write becomes a no-op so the live pipeline
+still runs in dev environments.
+"""
+from __future__ import annotations
+
+import os
+import logging
+from datetime import datetime, timezone
+from typing import Iterable, Optional
+
+logger = logging.getLogger("firebase_store")
+
+# Lazy import — firebase_admin is heavy and optional in dev.
+_db = None
+_initialized = False
+_disabled = False
+
+
+def init() -> None:
+    """Initialize firebase-admin once, idempotent. Safe to call repeatedly.
+
+    If the credentials file is missing, marks the store as disabled and all
+    write_minute() calls become no-ops (with a one-time warning logged).
+    """
+    global _db, _initialized, _disabled
+    if _initialized:
+        return
+    _initialized = True
+
+    cred_path = os.environ.get(
+        "FIREBASE_CREDENTIALS",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-credentials.json"),
+    )
+    if not os.path.exists(cred_path):
+        print(f"[firebase_store] credentials not found at {cred_path} — long-term storage DISABLED.")
+        _disabled = True
+        return
+
+    try:
+        from firebase_admin import credentials, firestore, initialize_app
+        cred = credentials.Certificate(cred_path)
+        initialize_app(cred)
+        _db = firestore.client()
+        print(f"[firebase_store] ENABLED — writing to project from {os.path.basename(cred_path)}")
+    except Exception as exc:                        # pylint: disable=broad-except
+        print(f"[firebase_store] init FAILED ({exc}) — long-term storage disabled.")
+        _disabled = True
+
+
+def is_enabled() -> bool:
+    return _db is not None and not _disabled
+
+
+# ----------------------------- aggregation ------------------------------
+
+NUMERIC_FIELDS = (
+    "cadence", "speed", "stride", "clearance",
+    "asymmetry", "variability",
+    "stance_pct", "stance_time", "swing_time", "step_time",
+    "intensity", "jerk",
+)
+
+
+def aggregate_minute(samples: Iterable[dict]) -> dict:
+    """Reduce a minute's worth of analysis ticks into a single doc.
+
+    For numeric fields: mean of non-null values.
+    For categorical fields (classification, state): mode + counts.
+    Steps: total step count attributed to this minute (rough — sums per-window
+    counts, which overlap; treat as relative not absolute).
+    """
+    samples = [s for s in samples if s is not None]
+    if not samples:
+        return {}
+
+    out: dict = {"ticks": len(samples)}
+
+    for field in NUMERIC_FIELDS:
+        vals = [s.get(field) for s in samples if s.get(field) is not None]
+        out[field] = round(sum(vals) / len(vals), 3) if vals else None
+
+    # Counts + majority for categorical fields.
+    for field in ("classification", "state"):
+        counts: dict[str, int] = {}
+        for s in samples:
+            v = s.get(field)
+            if v is None:
+                continue
+            counts[v] = counts.get(v, 0) + 1
+        out[f"{field}_counts"] = counts
+        out[f"{field}_majority"] = max(counts.items(), key=lambda kv: kv[1])[0] if counts else None
+
+    # Steps: total over the minute (sum of per-window counts; not strictly
+    # accurate due to window overlap but useful as a proxy).
+    steps = [s.get("steps") for s in samples if s.get("steps") is not None]
+    out["steps_total"] = int(sum(steps)) if steps else 0
+
+    return out
+
+
+# ----------------------------- writes ----------------------------------
+
+def write_minute(uid: str, minute_start_ms: int, samples: list[dict]) -> bool:
+    """Aggregate `samples` and write one doc to users/{uid}/minutes/{ts}.
+
+    Returns True if written, False if disabled or failed (logged).
+    """
+    if not is_enabled():
+        return False
+    if not samples:
+        return False
+    try:
+        agg = aggregate_minute(samples)
+        doc = {
+            "ts_ms":      minute_start_ms,
+            "minute_iso": datetime.fromtimestamp(minute_start_ms / 1000, tz=timezone.utc).isoformat(),
+            **agg,
+        }
+        # Doc ID = epoch ms — keeps natural time ordering.
+        _db.collection("users").document(uid) \
+            .collection("minutes").document(str(minute_start_ms)) \
+            .set(doc)
+        ts_iso = datetime.fromtimestamp(minute_start_ms / 1000, tz=timezone.utc).strftime("%H:%M:%SZ")
+        print(f"[firebase_store] wrote minute {ts_iso} ({len(samples)} ticks)")
+        return True
+    except Exception as exc:                        # pylint: disable=broad-except
+        print(f"[firebase_store] write_minute FAILED: {exc}")
+        return False
