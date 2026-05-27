@@ -5,7 +5,7 @@ import CadenceTrend from '../components/CadenceTrend';
 import ActivityBreakdownBar from '../components/ActivityBreakdownBar';
 
 const MAX_POINTS    = 20;                          // 20 ticks * 0.5s = 10s graph
-const WS_URL        = 'ws://localhost:8000/ws';
+const WS_URL        = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
 const SERVICE_UUID  = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const CHAR_UUID     = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 const CALIBRATION_S = 30;
